@@ -10,7 +10,6 @@ use std::{
     fs::{self, create_dir_all, remove_dir_all},
     io,
     path::{Path, PathBuf},
-    process,
     sync::atomic::{self, AtomicBool},
 };
 use walkdir::WalkDir;
@@ -20,10 +19,10 @@ use walkdir::WalkDir;
 static QUIET: AtomicBool = AtomicBool::new(false);
 
 /// The Cosmos SDK commit or tag to be cloned and used to build the proto files
-const COSMOS_SDK_REV: &str = "v0.44.1";
+const COSMOS_SDK_REV: &str = "v0.44.3";
 
 /// The Cosmos ibc-go commit or tag to be cloned and used to build the proto files
-const IBC_REV: &str = "v1.2.0";
+const IBC_REV: &str = "v2.0.0";
 
 /// The wasmd commit or tag to be cloned and used to build the proto files
 const WASMD_REV: &str = "v0.17.0";
@@ -32,9 +31,11 @@ const WASMD_REV: &str = "v0.17.0";
 // working directory.
 
 /// The directory generated cosmos-sdk proto files go into in this repo
-const COSMOS_SDK_PROTO_DIR: &str = "../cosmos-sdk-proto/src/prost/";
+const COSMOS_SDK_PROTO_DIR: &str = "./cosmos-sdk-proto/src/prost/";
 /// Directory where the cosmos-sdk submodule is located
-const COSMOS_SDK_DIR: &str = "../cosmos-sdk-go";
+const COSMOS_SDK_DIR: &str = "../cosmos-sdk";
+/// Cosmos Ethermint root
+const ETHERMINT_DIR: &str = "../ethermint";
 /// Directory where the cosmos/ibc-go submodule is located
 const IBC_DIR: &str = "../ibc-go";
 /// Directory where the submodule is located
@@ -85,7 +86,6 @@ fn main() {
 
     fs::create_dir(tmp_build_dir.clone()).unwrap();
 
-    update_submodules();
     output_sdk_version(&tmp_build_dir);
     output_ibc_version(&tmp_build_dir);
     output_wasmd_version(&tmp_build_dir);
@@ -93,6 +93,7 @@ fn main() {
     compile_ibc_protos_and_services(&tmp_build_dir);
     compile_wasmd_protos(&tmp_build_dir);
     compile_wasmd_proto_services(&tmp_build_dir);
+    compile_ethermint_protos_and_services(&tmp_build_dir);
     copy_generated_files(&tmp_build_dir, &proto_dir);
 
     if is_github() {
@@ -117,41 +118,6 @@ fn is_github() -> bool {
     env::args().any(|arg| arg == "--github")
 }
 
-fn run_git(args: impl IntoIterator<Item = impl AsRef<OsStr>>) {
-    let stdout = if is_quiet() {
-        process::Stdio::null()
-    } else {
-        process::Stdio::inherit()
-    };
-
-    let exit_status = process::Command::new("git")
-        .args(args)
-        .stdout(stdout)
-        .status()
-        .expect("git exit status missing");
-
-    if !exit_status.success() {
-        panic!("git exited with error code: {:?}", exit_status.code());
-    }
-}
-
-fn update_submodules() {
-    info!("Updating cosmos/cosmos-sdk submodule...");
-    run_git(&["submodule", "update", "--init"]);
-    run_git(&["-C", COSMOS_SDK_DIR, "fetch"]);
-    run_git(&["-C", COSMOS_SDK_DIR, "reset", "--hard", COSMOS_SDK_REV]);
-
-    info!("Updating cosmos/ibc-go submodule...");
-    run_git(&["submodule", "update", "--init"]);
-    run_git(&["-C", IBC_DIR, "fetch"]);
-    run_git(&["-C", IBC_DIR, "reset", "--hard", IBC_REV]);
-
-    info!("Updating wasmd submodule...");
-    run_git(&["submodule", "update", "--init"]);
-    run_git(&["-C", WASMD_DIR, "fetch"]);
-    run_git(&["-C", WASMD_DIR, "reset", "--hard", WASMD_REV]);
-}
-
 fn output_sdk_version(out_dir: &Path) {
     let path = out_dir.join("COSMOS_SDK_COMMIT");
     fs::write(path, COSMOS_SDK_REV).unwrap();
@@ -171,7 +137,7 @@ fn compile_wasmd_protos(out_dir: &Path) {
     let sdk_dir = Path::new(WASMD_DIR);
 
     info!(
-        "Compiling .proto files to Rust into '{}'...",
+        "Compiling wasmd .proto files to Rust into '{}'...",
         out_dir.display()
     );
 
@@ -302,9 +268,51 @@ fn compile_wasmd_proto_services(out_dir: impl AsRef<Path>) {
     info!("=> Done!");
 }
 
+fn compile_ethermint_protos_and_services(out_dir: &Path) {
+    info!(
+        "Compiling ethermint .proto files to Rust into '{}'...",
+        out_dir.display()
+    );
+    let root = env!("CARGO_MANIFEST_DIR");
+    let ethermint_dir = Path::new(ETHERMINT_DIR);
+
+    let proto_includes_paths = [
+        format!("{}/../proto", root),
+        format!("{}/proto", ethermint_dir.display()),
+        format!("{}/third_party/proto", ethermint_dir.display()),
+    ];
+
+    let proto_paths = [
+        format!("{}/proto/ethermint/crypto", ethermint_dir.display()),
+        format!("{}/proto/ethermint/evm", ethermint_dir.display()),
+        format!("{}/proto/ethermint/type", ethermint_dir.display()),
+        format!("{}/proto/ethermint/feemarket", ethermint_dir.display()),
+    ];
+   
+    // List available proto files
+    let mut protos: Vec<PathBuf> = vec![];
+    collect_protos(&proto_paths, &mut protos);
+
+    let includes: Vec<PathBuf> = proto_includes_paths.iter().map(PathBuf::from).collect();
+
+    // Compile all of the proto files, along with the grpc service clients
+    info!("Compiling proto definitions and clients for GRPC services!");
+    tonic_build::configure()
+        .build_client(true)
+        .build_server(false)
+        .format(true)
+        .out_dir(out_dir)
+        .extern_path(".tendermint", "::tendermint_proto")
+        .compile(&protos, &includes)
+        .unwrap();
+
+    info!("=> Done!");
+}
+
+
 fn compile_ibc_protos_and_services(out_dir: &Path) {
     info!(
-        "Compiling .proto files to Rust into '{}'...",
+        "Compiling ibc .proto files to Rust into '{}'...",
         out_dir.display()
     );
 
