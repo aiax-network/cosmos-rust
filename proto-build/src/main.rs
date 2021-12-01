@@ -36,6 +36,8 @@ const COSMOS_SDK_PROTO_DIR: &str = "./cosmos-sdk-proto/src/prost/";
 const COSMOS_SDK_DIR: &str = "../cosmos-sdk";
 /// Cosmos Ethermint root
 const ETHERMINT_DIR: &str = "../ethermint";
+/// Tendermint root
+const TENDERMINT_DIR: &str = "../tendermint";
 /// Directory where the cosmos/ibc-go submodule is located
 const IBC_DIR: &str = "../ibc-go";
 /// Directory where the submodule is located
@@ -47,7 +49,7 @@ const TMP_BUILD_DIR: &str = "/tmp/tmp-protobuf/";
 
 /// Protos belonging to these Protobuf packages will be excluded
 /// (i.e. because they are sourced from `tendermint-proto`)
-const EXCLUDED_PROTO_PACKAGES: &[&str] = &["gogoproto", "google", "tendermint"];
+const EXCLUDED_PROTO_PACKAGES: &[&str] = &["gogoproto", "google"];
 /// Regex for locating instances of `tendermint-proto` in prost/tonic build output
 const TENDERMINT_PROTO_REGEX: &str = "(super::)+tendermint";
 /// Attribute preceeding a Tonic client definition
@@ -93,6 +95,7 @@ fn main() {
     compile_ibc_protos_and_services(&tmp_build_dir);
     compile_wasmd_protos(&tmp_build_dir);
     compile_wasmd_proto_services(&tmp_build_dir);
+    compile_tendermint_protos_and_services(&tmp_build_dir);
     compile_ethermint_protos_and_services(&tmp_build_dir);
     copy_generated_files(&tmp_build_dir, &proto_dir);
 
@@ -161,7 +164,7 @@ fn compile_wasmd_protos(out_dir: &Path) {
     // Compile all proto files
     let mut config = prost_build::Config::default();
     config.out_dir(out_dir);
-    config.extern_path(".tendermint", "::tendermint_proto");
+    config.extern_path(".tendermint", "crate::tendermint");
 
     if let Err(e) = config.compile_protos(&protos, &includes) {
         eprintln!("[error] couldn't compile protos: {}", e);
@@ -221,7 +224,7 @@ fn compile_sdk_protos_and_services(out_dir: &Path) {
         .build_server(false)
         .format(true)
         .out_dir(out_dir)
-        .extern_path(".tendermint", "::tendermint_proto")
+        .extern_path(".tendermint", "crate::tendermint")
         .compile(&protos, &includes)
         .unwrap();
 
@@ -288,7 +291,7 @@ fn compile_ethermint_protos_and_services(out_dir: &Path) {
         format!("{}/proto/ethermint/type", ethermint_dir.display()),
         format!("{}/proto/ethermint/feemarket", ethermint_dir.display()),
     ];
-   
+
     // List available proto files
     let mut protos: Vec<PathBuf> = vec![];
     collect_protos(&proto_paths, &mut protos);
@@ -302,13 +305,101 @@ fn compile_ethermint_protos_and_services(out_dir: &Path) {
         .build_server(false)
         .format(true)
         .out_dir(out_dir)
-        .extern_path(".tendermint", "::tendermint_proto")
+        .extern_path(".tendermint", "crate::tendermint")
         .compile(&protos, &includes)
         .unwrap();
 
     info!("=> Done!");
 }
 
+fn compile_tendermint_protos_and_services(out_dir: &Path) {
+    info!(
+        "Compiling tendermint .proto files to Rust into '{}'...",
+        out_dir.display()
+    );
+
+    let tendermint_dir = Path::new(TENDERMINT_DIR);
+
+    let proto_includes_paths = [
+        format!("{}/proto", tendermint_dir.display()),
+        format!("{}/proto/tendermint", tendermint_dir.display()),
+        format!("{}/third_party/proto", tendermint_dir.display()),
+    ];
+
+    // paths for only proto generation, these can not be combined
+    // because the service generator writes to the same files and will
+    // not create struct definitions if there are no services
+    // folders here will have all protos in them compiled
+    let proto_paths = [
+        format!("{}/proto/tendermint/blocksync", tendermint_dir.display()),
+        format!("{}/proto/tendermint/consensus", tendermint_dir.display()),
+        format!("{}/proto/tendermint/crypto", tendermint_dir.display()),
+        format!("{}/proto/tendermint/mempool", tendermint_dir.display()),
+        format!("{}/proto/tendermint/p2p", tendermint_dir.display()),
+        format!("{}/proto/tendermint/privval", tendermint_dir.display()),
+        format!("{}/proto/tendermint/state", tendermint_dir.display()),
+        format!("{}/proto/tendermint/statesync", tendermint_dir.display()),
+        format!("{}/proto/tendermint/types", tendermint_dir.display()),
+        format!("{}/proto/tendermint/version", tendermint_dir.display()),
+        format!("{}/proto/tendermint/libs", tendermint_dir.display()),
+    ];
+
+    // paths for GRPC service generation, these are strict paths, no other
+    // files will be found
+    let proto_grpc_paths = [
+        format!(
+            "{}/proto/tendermint/abci/types.proto",
+            tendermint_dir.display()
+        ),
+        format!(
+            "{}/proto/tendermint/rpc/grpc/types.proto",
+            tendermint_dir.display()
+        ),
+    ];
+    // these paths will be 'clobbered' that is generated with grpc definitions by the tonic build
+    // and then overwritten by the prost build when it generates files of the same name without
+    // the service definitions. These files are specifically exempted from clobbering by renaming
+    // and then restoring them.
+    let proto_grpc_noclobber_paths = ["tendermint.abci.rs", "tendermint.rpc.grpc.rs"];
+
+    // List available proto files
+    let mut protos: Vec<PathBuf> = vec![];
+    collect_protos(&proto_paths, &mut protos);
+
+    // List available paths for dependencies
+    let includes: Vec<PathBuf> = proto_includes_paths.iter().map(PathBuf::from).collect();
+
+    // List available paths for services
+    let proto_grpc_paths: Vec<PathBuf> = proto_grpc_paths.iter().map(PathBuf::from).collect();
+
+    let mut config = prost_build::Config::default();
+    config.out_dir(out_dir);
+
+    // Compile all of the proto files, along with grpc service clients
+    info!("Compiling proto definitions and clients for GRPC services!");
+    tonic_build::configure()
+        .build_client(true)
+        .build_server(false)
+        .format(true)
+        .out_dir(out_dir)
+        .compile(&proto_grpc_paths, &includes)
+        .unwrap();
+
+    for i in proto_grpc_noclobber_paths {
+        fs::rename(out_dir.join(i), out_dir.join(format!("{}.noclobber", i))).unwrap();
+    }
+
+    if let Err(e) = config.compile_protos(&protos, &includes) {
+        eprintln!("[error] couldn't compile protos: {}", e);
+        panic!("protoc failed!");
+    }
+
+    for i in proto_grpc_noclobber_paths {
+        fs::rename(out_dir.join(format!("{}.noclobber", i)), out_dir.join(i)).unwrap();
+    }
+
+    info!("=> Done!");
+}
 
 fn compile_ibc_protos_and_services(out_dir: &Path) {
     info!(
@@ -351,7 +442,7 @@ fn compile_ibc_protos_and_services(out_dir: &Path) {
         .build_server(false)
         .format(true)
         .out_dir(out_dir)
-        .extern_path(".tendermint", "::tendermint_proto")
+        .extern_path(".tendermint", "crate::tendermint")
         .compile(&protos, &includes)
         .unwrap();
 
