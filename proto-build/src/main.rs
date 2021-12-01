@@ -288,7 +288,7 @@ fn compile_ethermint_protos_and_services(out_dir: &Path) {
     let proto_paths = [
         format!("{}/proto/ethermint/crypto", ethermint_dir.display()),
         format!("{}/proto/ethermint/evm", ethermint_dir.display()),
-        format!("{}/proto/ethermint/type", ethermint_dir.display()),
+        format!("{}/proto/ethermint/types", ethermint_dir.display()),
         format!("{}/proto/ethermint/feemarket", ethermint_dir.display()),
     ];
 
@@ -518,7 +518,7 @@ fn copy_and_patch(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<(
     // order to leverage types from the upstream crate.
     let contents = Regex::new(TENDERMINT_PROTO_REGEX)
         .unwrap()
-        .replace_all(&contents, "tendermint_proto");
+        .replace_all(&contents, "crate::tendermint");
 
     // Patch each service definition with a feature attribute
     let patched_contents =
