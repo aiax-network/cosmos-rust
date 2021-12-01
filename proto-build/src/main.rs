@@ -91,12 +91,12 @@ fn main() {
     output_sdk_version(&tmp_build_dir);
     output_ibc_version(&tmp_build_dir);
     output_wasmd_version(&tmp_build_dir);
-    compile_sdk_protos_and_services(&tmp_build_dir);
+    compile_ethermint_protos_and_services(&tmp_build_dir);
     compile_ibc_protos_and_services(&tmp_build_dir);
     compile_wasmd_protos(&tmp_build_dir);
     compile_wasmd_proto_services(&tmp_build_dir);
+    compile_sdk_protos_and_services(&tmp_build_dir);
     compile_tendermint_protos_and_services(&tmp_build_dir);
-    compile_ethermint_protos_and_services(&tmp_build_dir);
     copy_generated_files(&tmp_build_dir, &proto_dir);
 
     if is_github() {
@@ -288,8 +288,8 @@ fn compile_ethermint_protos_and_services(out_dir: &Path) {
     let proto_paths = [
         format!("{}/proto/ethermint/crypto", ethermint_dir.display()),
         format!("{}/proto/ethermint/evm", ethermint_dir.display()),
-        format!("{}/proto/ethermint/types", ethermint_dir.display()),
         format!("{}/proto/ethermint/feemarket", ethermint_dir.display()),
+        format!("{}/proto/ethermint/types", ethermint_dir.display()),
     ];
 
     // List available proto files
