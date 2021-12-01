@@ -36,6 +36,8 @@ const COSMOS_SDK_PROTO_DIR: &str = "./cosmos-sdk-proto/src/prost/";
 const COSMOS_SDK_DIR: &str = "../cosmos-sdk";
 /// Cosmos Ethermint root
 const ETHERMINT_DIR: &str = "../ethermint";
+/// Gravity proto root
+const GRAVITY_DIR: &str = "../gravity-bridge/module";
 /// Tendermint root
 const TENDERMINT_DIR: &str = "../tendermint";
 /// Directory where the cosmos/ibc-go submodule is located
@@ -91,6 +93,7 @@ fn main() {
     output_sdk_version(&tmp_build_dir);
     output_ibc_version(&tmp_build_dir);
     output_wasmd_version(&tmp_build_dir);
+    compile_gravity_protos_and_services(&tmp_build_dir);
     compile_ethermint_protos_and_services(&tmp_build_dir);
     compile_ibc_protos_and_services(&tmp_build_dir);
     compile_wasmd_protos(&tmp_build_dir);
@@ -266,6 +269,43 @@ fn compile_wasmd_proto_services(out_dir: impl AsRef<Path>) {
         .format(true)
         .out_dir(out_dir)
         .compile(&services, &includes)
+        .unwrap();
+
+    info!("=> Done!");
+}
+
+fn compile_gravity_protos_and_services(out_dir: &Path) {
+    info!(
+        "Compiling gravity .proto files to Rust into '{}'...",
+        out_dir.display()
+    );
+    let root = env!("CARGO_MANIFEST_DIR");
+    let gravity_dir = Path::new(GRAVITY_DIR);
+
+    let proto_includes_paths = [
+        format!("{}/../proto", root),
+        format!("{}/proto", gravity_dir.display()),
+        format!("{}/third_party/proto", gravity_dir.display()),
+    ];
+
+    let proto_paths = [format!("{}/proto/gravity", gravity_dir.display())];
+
+    // List available proto files
+    let mut protos: Vec<PathBuf> = vec![];
+    collect_protos(&proto_paths, &mut protos);
+
+    let includes: Vec<PathBuf> = proto_includes_paths.iter().map(PathBuf::from).collect();
+
+    // Compile all of the proto files, along with the grpc service clients
+    info!("Compiling proto definitions and clients for GRPC services!");
+    tonic_build::configure()
+        .build_client(true)
+        .build_server(false)
+        .format(true)
+        .out_dir(out_dir)
+        .extern_path(".tendermint", "crate::tendermint")
+        .extern_path(".cosmos", "crate::cosmos")
+        .compile(&protos, &includes)
         .unwrap();
 
     info!("=> Done!");
