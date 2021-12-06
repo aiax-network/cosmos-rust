@@ -225,8 +225,8 @@ pub struct MsgDelegateKeys {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MsgDelegateKeysResponse {}
 /// DelegateKeysSignMsg defines the message structure an operator is expected to
-/// sign when submitting a MsgDelegateKeys message. The resulting signature should
-/// populate the eth_signature field.
+/// sign when submitting a MsgDelegateKeys message. The resulting signature
+/// should populate the eth_signature field.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DelegateKeysSignMsg {
     #[prost(string, tag = "1")]
@@ -255,6 +255,12 @@ pub struct SendToCosmosEvent {
     pub cosmos_receiver: ::prost::alloc::string::String,
     #[prost(uint64, tag = "6")]
     pub ethereum_height: u64,
+    #[prost(string, tag = "7")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub symbol: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "9")]
+    pub decimals: u32,
 }
 /// BatchExecutedEvent claims that a batch of BatchTxExecutedal operations on the
 /// bridge contract was executed successfully on ETH
@@ -508,16 +514,16 @@ pub mod msg_client {
 ///
 /// target_eth_tx_timeout:
 ///
-/// This is the 'target' value for when ethereum transactions time out, this is a target
-/// because Ethereum is a probabilistic chain and you can't say for sure what the
-/// block frequency is ahead of time.
+/// This is the 'target' value for when ethereum transactions time out, this is a
+/// target because Ethereum is a probabilistic chain and you can't say for sure
+/// what the block frequency is ahead of time.
 ///
 /// average_block_time
 /// average_ethereum_block_time
 ///
 /// These values are the average Cosmos block time and Ethereum block time
-/// respectively and they are used to compute what the target batch timeout is. It
-/// is important that governance updates these in case of any major, prolonged
+/// respectively and they are used to compute what the target batch timeout is.
+/// It is important that governance updates these in case of any major, prolonged
 /// change in the time it takes to produce a block
 ///
 /// slash_fraction_signer_set_tx
@@ -1206,8 +1212,8 @@ pub mod query_client {
             let path = http::uri::PathAndQuery::from_static("/gravity.v1.Query/ERC20ToDenom");
             self.inner.unary(request.into_request(), path, codec).await
         }
-        #[doc = " DenomToERC20Params implements a query that allows ERC-20 parameter information"]
-        #[doc = " to be retrieved by a Cosmos base denomination."]
+        #[doc = " DenomToERC20Params implements a query that allows ERC-20 parameter"]
+        #[doc = " information to be retrieved by a Cosmos base denomination."]
         pub async fn denom_to_erc20_params(
             &mut self,
             request: impl tonic::IntoRequest<super::DenomToErc20ParamsRequest>,
