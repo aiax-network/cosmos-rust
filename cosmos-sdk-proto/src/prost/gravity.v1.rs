@@ -261,8 +261,6 @@ pub struct SendToCosmosEvent {
     pub symbol: ::prost::alloc::string::String,
     #[prost(uint32, tag = "9")]
     pub decimals: u32,
-    #[prost(bool, tag = "10")]
-    pub native: bool,
 }
 /// BatchExecutedEvent claims that a batch of BatchTxExecutedal operations on the
 /// bridge contract was executed successfully on ETH
